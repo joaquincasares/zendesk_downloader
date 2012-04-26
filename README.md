@@ -4,7 +4,7 @@ Setup
 Ensure your ~/.zendesk.cfg is already configured. This is mine:
 
     [ZenDesk]
-    email = joaquin@datastax.com
+    email = joaquin@<domain>.com
     pass = <This can be blank>
 
     [Downloader]
@@ -13,7 +13,7 @@ Ensure your ~/.zendesk.cfg is already configured. This is mine:
 
 Then perhaps something simple like:
 
-    sudo ln -s ~/repos/support_tool/zendesk_downloader/download /usr/local/bin/download
+    sudo ln -s ~/repos/zendesk_downloader/download /usr/local/bin/download
 
 Usage
 -----
