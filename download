@@ -1,0 +1,196 @@
+#!/usr/bin/env python
+
+import calendar
+import getpass
+import os
+import subprocess
+import shlex
+import sys
+import time
+import urllib
+
+import ConfigParser
+
+from xml.dom.minidom import parseString
+from xml.etree import ElementTree as ET
+
+admin_email = False
+admin_password = False
+download_directory = '/tmp'
+run_open = False
+
+def get_authentication():
+    global admin_email
+    global admin_password
+    global download_directory
+    global run_open
+    configfile = os.path.join(os.path.expanduser('~'), '.zendesk.cfg')
+
+    while True:
+        if not os.path.exists(configfile):
+            admin_email = raw_input('Zendesk Email Address: ')
+            admin_password = getpass.getpass()
+        else:
+            config = ConfigParser.RawConfigParser()
+            config.read(configfile)
+
+            admin_email = config.get('ZenDesk', 'email') if config.has_option('ZenDesk', 'email') else raw_input('Zendesk Email Address: ')
+            admin_password = config.get('ZenDesk', 'pass') if config.has_option('ZenDesk', 'pass') and config.get('ZenDesk', 'pass') else getpass.getpass()
+            download_directory = config.get('Downloader', 'download_directory') if config.has_option('Downloader', 'download_directory') else download_directory
+            run_open = config.getboolean('Downloader', 'run_open') if config.has_option('Downloader', 'run_open') and config.get('Downloader', 'run_open') else run_open
+
+        if "<error>" in get_all_users():
+            print 'Authentication with "%s" failed. Please try again...' % (admin_email)
+        else:
+            break
+    # print 'Succesfully authenticated to ZenDesk!'
+
+def exe(command):
+    '''Helper function to execute commands and print traces of the command and output for debugging/logging purposes'''
+
+    process = subprocess.Popen(shlex.split(command), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    read = process.communicate()
+    return read
+
+def get_all_users():
+    '''Test function for authentication purposes'''
+
+    curl_command = """
+        curl -u %s:%s
+        -L https://support.datastax.com/users.xml
+        """.replace('\n', '') % (admin_email, admin_password)
+    return exe(curl_command)[0]
+
+def get_ticket(ticket_id):
+    '''Get the ticket posting per id by way of unix'''
+
+    curl_command = """
+        curl -u %s:%s
+        -L https://support.datastax.com/tickets/%s.xml
+        """.replace('\n', '') % (admin_email, admin_password, ticket_id)
+    return exe(curl_command)[0]
+
+def extract_file_information(tickets):
+    '''Extract curl'd XML data and format into a dictionary with an array of attachments'''
+    attachment_list = []
+    element = ET.XML(tickets)
+    comments = element.find('comments').findall('comment')
+    for comment in comments:
+        attachments = comment.find('attachments').findall('attachment')
+        for attachment in attachments:
+            attachment_list.append([attachment.find('id').text, attachment.find('created-at').text, attachment.find('filename').text, attachment.find('url').text])
+
+    return {
+        'ticket-id': element.find('nice-id').text,
+        'organization-id': element.find('organization-id').text,
+        'attachments': attachment_list
+    }
+
+def filename_split(filename):
+    '''Return the filename root and extension taking .tar.gz's into account'''
+
+    root, extension = os.path.splitext(filename)
+    if filename.endswith('.tar.gz'):
+        root, first_ext = os.path.splitext(root)
+        extension = first_ext + extension
+    return root, extension
+
+def fix_filenames(file_id, filename):
+    '''Make filenames ZenDesk organizational friendly'''
+
+    root, extension = filename_split(filename)
+    if not extension:
+        extension = '.txt'
+    return '%s_%s%s' % (root, file_id, extension)
+
+def get_formatted_time(created_at):
+    '''Correctly format the time for touch -t from the provided ZenDesk timestamp'''
+
+    time_format = '%Y-%m-%dT%H:%M:%S'
+    created_time, zone = created_at[:-6], created_at[-6:]
+    created_stamp = calendar.timegm(time.strptime(created_time, time_format))
+    offset_hr, offset_min = int(zone[0:3]), int(zone[0] + zone[-2:])
+    real_stamp_time = created_stamp - (offset_hr * 3600 + offset_min * 60)
+    created_date = time.localtime(real_stamp_time)
+    formatted_time = time.strftime('%Y%m%d%H%M', created_date)
+    return formatted_time
+
+def extract_files(download_directory, filename, local_filename, formatted_time):
+    # Calculate and ensure archive directory exists
+    archive_folder = os.path.join(download_directory, filename_split(filename)[0])
+    if not os.path.isdir(archive_folder):
+        os.makedirs(archive_folder)
+
+    # Perform the actual extraction process
+    print "Extracting %s into %s..." % (filename, archive_folder)
+    if filename_split(filename)[1] == '.tar.gz':
+        os.system('cd %s; tar xf %s' % (archive_folder, local_filename))
+    elif filename_split(filename)[1] == '.zip':
+        os.system('cd %s; unzip %s' % (archive_folder, local_filename))
+
+    # Modify the created and modified timestamps for the archive folder
+    os.system('touch -t  %s %s' % (formatted_time, archive_folder))
+    os.system('touch -mt %s %s' % (formatted_time, archive_folder))
+
+
+def download_files(attachments):
+    '''Download all the files provided in the attachments dictionary'''
+
+    global download_directory
+
+    # Ensure the download directory exists
+    download_directory = os.path.join(download_directory, attachments['organization-id'], attachments['ticket-id'])
+    if not os.path.exists(download_directory):
+        os.makedirs(download_directory)
+
+    # Download each attachment
+    for attachment in attachments['attachments']:
+
+        # Extract and properly format all data
+        file_id, created_at, filename, url = attachment
+        filename = fix_filenames(file_id, filename)
+        local_filename = os.path.join(download_directory, filename)
+        formatted_time = get_formatted_time(created_at)
+
+        # Perform the actual download of each file
+        if not os.path.exists(local_filename):
+            print "Downloading %s to %s..." % (filename, local_filename)
+            urllib.urlretrieve(url, local_filename)
+
+            # Check if file extraction is possible
+            compressed_extensions = ['.tar.gz', '.zip']
+            if filename_split(filename)[1] in compressed_extensions:
+                extract_files(download_directory, filename, local_filename, formatted_time)
+
+            # Modify the created and modified timestamps for each file
+            os.system('touch -t  %s %s' % (formatted_time, local_filename))
+            os.system('touch -mt %s %s' % (formatted_time, local_filename))
+
+    return download_directory
+
+def main():
+    if len(sys.argv) == 2:
+        ticket_id = sys.argv[1]
+    else:
+        sys.stderr.write('Usage: %s <ticket-id>\n' % __file__)
+        sys.exit(1)
+
+    # Ensure our authentication is correct
+    get_authentication()
+
+    # Perform all attachment downloads
+    tickets = get_ticket(ticket_id)
+    attachments = extract_file_information(tickets)
+    download_directory = download_files(attachments)
+
+    # Open the finder to display downloaded files
+    print
+    print "Files download to:"
+    print download_directory
+    print
+    if run_open:
+        os.system('open %s' % download_directory)
+
+
+if __name__ == "__main__":
+    main()
