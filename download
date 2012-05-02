@@ -18,12 +18,14 @@ admin_email = False
 admin_password = False
 download_directory = '/tmp'
 run_open = False
+open_program = 'open'
 
 def get_authentication():
     global admin_email
     global admin_password
     global download_directory
     global run_open
+    global open_program
     configfile = os.path.join(os.path.expanduser('~'), '.zendesk.cfg')
 
     while True:
@@ -38,6 +40,7 @@ def get_authentication():
             admin_password = config.get('ZenDesk', 'pass') if config.has_option('ZenDesk', 'pass') and config.get('ZenDesk', 'pass') else getpass.getpass()
             download_directory = config.get('Downloader', 'download_directory') if config.has_option('Downloader', 'download_directory') else download_directory
             run_open = config.getboolean('Downloader', 'run_open') if config.has_option('Downloader', 'run_open') and config.get('Downloader', 'run_open') else run_open
+            open_program = config.get('Downloader', 'open_program') if config.has_option('Downloader', 'open_program') else open_program
 
         if "<error>" in get_all_users():
             print 'Authentication with "%s" failed. Please try again...' % (admin_email)
@@ -200,7 +203,7 @@ def main():
     print download_directory
     print
     if run_open:
-        os.system('open %s' % download_directory)
+        os.system('%s %s' % (open_program, download_directory))
 
 
 if __name__ == "__main__":

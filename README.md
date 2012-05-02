@@ -9,11 +9,15 @@ Ensure your ~/.zendesk.cfg is already configured. This is mine:
 
     [Downloader]
     download_directory = /Users/joaquin/Downloads/support
-    run_open = False
+    run_open = True
+    open_program = subl
 
 Then perhaps something simple like:
 
     sudo ln -s ~/repos/zendesk_downloader/download /usr/local/bin/download
+
+Note: `subl` is an alias that opens Sublime Text 2 and `subl <folder-path>` opens the entire folder in Sublime.
+You can choose any command you want, including `open`, which opens a Finder window.
 
 Usage
 -----
