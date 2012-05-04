@@ -125,7 +125,7 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz']
     file_extension = filename_split(filename)[1]
     if not file_extension in compressed_extensions:
-        return local_filename
+        return
 
     # Calculate and ensure archive directory exists
     archive_folder = os.path.join(download_directory, filename_split(filename)[0])
@@ -140,13 +140,10 @@ def check_and_extract_files(download_directory, filename, local_filename, format
         os.system('cd %s; unzip %s' % (archive_folder, local_filename))
     elif file_extension == '.gz':
         os.system('gunzip -d %s' % (local_filename))
-        return (filename_split(filename)[0])
 
     # Modify the created and modified timestamps for the archive folder
     os.system('touch -t  %s %s' % (formatted_time, archive_folder))
     os.system('touch -mt %s %s' % (formatted_time, archive_folder))
-
-    return local_filename
 
 
 def download_files(attachments):
@@ -174,7 +171,7 @@ def download_files(attachments):
             urllib.urlretrieve(url, local_filename)
 
             # Check if file extraction is possible
-            local_filename = check_and_extract_files(download_directory, filename, local_filename, formatted_time)
+            check_and_extract_files(download_directory, filename, local_filename, formatted_time)
 
             # Modify the created and modified timestamps for each file
             os.system('touch -t  %s %s' % (formatted_time, local_filename))
