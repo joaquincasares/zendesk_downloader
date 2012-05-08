@@ -123,12 +123,12 @@ def check_and_extract_files(download_directory, filename, local_filename, format
 
     # Compare known extractable file extensions to see if there is a match
     compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz']
-    file_extension = filename_split(filename)[1]
+    file_root, file_extension = filename_split(filename)
     if not file_extension in compressed_extensions:
         return
 
     # Calculate and ensure archive directory exists
-    archive_folder = os.path.join(download_directory, filename_split(filename)[0])
+    archive_folder = os.path.join(download_directory, file_root)
     if not os.path.isdir(archive_folder) and not file_extension in ['.gz']:
         os.makedirs(archive_folder)
 
@@ -145,6 +145,32 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     os.system('touch -t  %s %s' % (formatted_time, archive_folder))
     os.system('touch -mt %s %s' % (formatted_time, archive_folder))
 
+def check_and_convert_files(download_directory, filename, local_filename, formatted_time):
+    '''Converts files to txt if file type is known'''
+
+    # Currently only supports OSX due to `textutil`
+    if sys.platform != 'darwin':
+        return
+
+    # Compare known extractable file extensions to see if there is a match
+    compressed_extensions = ['.rtf', '.doc', '.docx']
+    file_root, file_extension = filename_split(filename)
+    if not file_extension in compressed_extensions:
+        return
+
+    # Perform the actual conversion process
+    print "Converting %s into txt..." % (filename)
+    os.system('cd %s; textutil -convert txt %s' % (download_directory, local_filename))
+
+    # Modify the created and modified timestamps for the converted file
+    os.system('touch -t  %s %s.txt' % (formatted_time, file_root))
+    os.system('touch -mt %s %s.txt' % (formatted_time, file_root))
+
+    # Move the original file (to be touched later)
+    raw_directory = os.path.join(download_directory, 'raw_files')
+    if not os.path.exists(raw_directory):
+        os.makedirs(raw_directory)
+    os.system('mv %s %s' % (local_filename, raw_directory))
 
 def download_files(attachments):
     '''Download all the files provided in the attachments dictionary'''
@@ -172,6 +198,7 @@ def download_files(attachments):
 
             # Check if file extraction is possible
             check_and_extract_files(download_directory, filename, local_filename, formatted_time)
+            check_and_convert_files(download_directory, filename, local_filename, formatted_time)
 
             # Modify the created and modified timestamps for each file
             os.system('touch -t  %s %s' % (formatted_time, local_filename))
