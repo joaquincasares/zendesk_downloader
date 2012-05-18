@@ -51,8 +51,12 @@ def get_authentication():
 def exe(command):
     '''Helper function to execute commands and print traces of the command and output for debugging/logging purposes'''
 
-    process = subprocess.Popen(shlex.split(command), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-    read = process.communicate()
+    try:
+        process = subprocess.Popen(shlex.split(command), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        read = process.communicate()
+    except OSError:
+        sys.stderr.write('Please ensure curl is installed.\n')
+        sys.exit(1)
     return read
 
 def get_all_users():
