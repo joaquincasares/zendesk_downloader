@@ -1,11 +1,13 @@
 Setup
 -----
 
-Ensure your ~/.zendesk.cfg is already configured. This is mine:
+Ensure your ~/.zendesk.cfg is already configured.
+You can use your API token information as found at https://support.datastax.com/settings/api.
+This is mine:
 
     [ZenDesk]
-    email = joaquin@<domain>.com
-    pass = <This can be blank>
+    email = joaquin@<domain>.com/token
+    pass = TOKEN
 
     [Downloader]
     download_directory = /Users/joaquin/Downloads/support
