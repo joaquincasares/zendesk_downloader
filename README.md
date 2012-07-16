@@ -3,6 +3,7 @@ Setup
 
 Ensure your ~/.zendesk.cfg is already configured.
 You can use your API token information as found at https://support.datastax.com/settings/api.
+(You will need ZenDesk admin access to view this page.)
 This is mine:
 
     [ZenDesk]
