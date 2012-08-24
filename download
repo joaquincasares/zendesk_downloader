@@ -42,16 +42,17 @@ def get_authentication():
             run_open = config.getboolean('Downloader', 'run_open') if config.has_option('Downloader', 'run_open') and config.get('Downloader', 'run_open') else run_open
             open_program = config.get('Downloader', 'open_program') if config.has_option('Downloader', 'open_program') else open_program
 
-        if 'error' in get_all_users():
+        if 'error' in get_users_by_page():
             print 'Authentication with "%s" failed. Please try again...' % (admin_email)
         else:
             break
     # print 'Succesfully authenticated to ZenDesk!'
 
-def get_all_users():
+def get_users_by_page(page_num=1):
     '''Test function for authentication purposes'''
 
     r = requests.get('https://support.datastax.com/users.json',
+                      params={'page': page_num},
                       auth=(admin_email, admin_password))
     return json.loads(r.text)
 
