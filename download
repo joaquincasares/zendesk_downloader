@@ -54,14 +54,14 @@ def get_users_by_page(page_num=1):
     r = requests.get('https://support.datastax.com/users.json',
                       params={'page': page_num},
                       auth=(admin_email, admin_password))
-    return json.loads(r.text)
+    return r.json
 
 def get_ticket(ticket_id):
     '''Get the ticket posting per id by way of unix'''
 
     r = requests.get('https://support.datastax.com/tickets/%s.json' % ticket_id,
                       auth=(admin_email, admin_password))
-    return json.loads(r.text)
+    return r.json
 
 def extract_file_information(ticket):
     '''Extract curl'd XML data and format into a dictionary with an array of attachments'''
