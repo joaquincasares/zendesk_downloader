@@ -2,23 +2,23 @@
 
 import calendar
 import getpass
+import json
 import os
-import subprocess
-import shlex
+import requests
 import sys
 import time
 import urllib
 
 import ConfigParser
 
-from xml.dom.minidom import parseString
-from xml.etree import ElementTree as ET
-
 admin_email = False
 admin_password = False
 download_directory = '/tmp'
 run_open = False
 open_program = 'open'
+
+def print_json(json_object):
+    print json.dumps(json_object, sort_keys=True, indent=4)
 
 def get_authentication():
     global admin_email
@@ -42,54 +42,37 @@ def get_authentication():
             run_open = config.getboolean('Downloader', 'run_open') if config.has_option('Downloader', 'run_open') and config.get('Downloader', 'run_open') else run_open
             open_program = config.get('Downloader', 'open_program') if config.has_option('Downloader', 'open_program') else open_program
 
-        if "<error>" in get_all_users():
+        if 'error' in get_all_users():
             print 'Authentication with "%s" failed. Please try again...' % (admin_email)
         else:
             break
     # print 'Succesfully authenticated to ZenDesk!'
 
-def exe(command):
-    '''Helper function to execute commands and print traces of the command and output for debugging/logging purposes'''
-
-    try:
-        process = subprocess.Popen(shlex.split(command), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        read = process.communicate()
-    except OSError:
-        sys.stderr.write('Please ensure curl is installed.\n')
-        sys.exit(1)
-    return read
-
 def get_all_users():
     '''Test function for authentication purposes'''
 
-    curl_command = """
-        curl -u %s:%s
-        -L https://support.datastax.com/users.xml
-        """.replace('\n', '') % (admin_email, admin_password)
-    return exe(curl_command)[0]
+    r = requests.get('https://support.datastax.com/users.json',
+                      auth=(admin_email, admin_password))
+    return json.loads(r.text)
 
 def get_ticket(ticket_id):
     '''Get the ticket posting per id by way of unix'''
 
-    curl_command = """
-        curl -u %s:%s
-        -L https://support.datastax.com/tickets/%s.xml
-        """.replace('\n', '') % (admin_email, admin_password, ticket_id)
-    return exe(curl_command)[0]
+    r = requests.get('https://support.datastax.com/tickets/%s.json' % ticket_id,
+                      auth=(admin_email, admin_password))
+    return json.loads(r.text)
 
-def extract_file_information(tickets):
+def extract_file_information(ticket):
     '''Extract curl'd XML data and format into a dictionary with an array of attachments'''
     attachment_list = []
-    element = ET.XML(tickets)
-    comments = element.find('comments').findall('comment')
-    for comment in comments:
-        attachments = comment.find('attachments').findall('attachment')
-        for attachment in attachments:
-            attachment_list.append([attachment.find('id').text, attachment.find('created-at').text, attachment.find('filename').text, attachment.find('url').text])
+
+    for comment in ticket['comments']:
+        for attachment in comment['attachments']:
+            attachment_list.append([attachment['id'], attachment['created_at'], attachment['filename'], attachment['url']])
 
     return {
-        'ticket-id': element.find('nice-id').text,
-        'organization-id': element.find('organization-id').text,
+        'ticket_id': str(ticket['nice_id']),
+        'organization_id': str(ticket['organization_id']),
         'attachments': attachment_list
     }
 
@@ -113,7 +96,7 @@ def fix_filenames(file_id, filename):
 def get_formatted_time(created_at):
     '''Correctly format the time for touch -t from the provided ZenDesk timestamp'''
 
-    time_format = '%Y-%m-%dT%H:%M:%S'
+    time_format = '%Y/%m/%d %H:%M:%S'
     created_time, zone = created_at[:-6], created_at[-6:]
     created_stamp = calendar.timegm(time.strptime(created_time, time_format))
     offset_hr, offset_min = int(zone[0:3]), int(zone[0] + zone[-2:])
@@ -182,7 +165,7 @@ def download_files(attachments):
     global download_directory
 
     # Ensure the download directory exists
-    download_directory = os.path.join(download_directory, attachments['organization-id'], attachments['ticket-id'])
+    download_directory = os.path.join(download_directory, attachments['organization_id'], attachments['ticket_id'])
     if not os.path.exists(download_directory):
         os.makedirs(download_directory)
 
@@ -214,15 +197,15 @@ def main():
     if len(sys.argv) == 2:
         ticket_id = sys.argv[1]
     else:
-        sys.stderr.write('Usage: %s <ticket-id>\n' % __file__)
+        sys.stderr.write('Usage: %s <ticket_id>\n' % __file__)
         sys.exit(1)
 
     # Ensure our authentication is correct
     get_authentication()
 
     # Perform all attachment downloads
-    tickets = get_ticket(ticket_id)
-    attachments = extract_file_information(tickets)
+    ticket = get_ticket(ticket_id)
+    attachments = extract_file_information(ticket)
     download_directory = download_files(attachments)
 
     # Open the finder to display downloaded files
