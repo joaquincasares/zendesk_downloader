@@ -110,14 +110,14 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     '''Extract files to their proper directories if file type is known'''
 
     # Compare known extractable file extensions to see if there is a match
-    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz']
+    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2']
     file_root, file_extension = filename_split(filename)
     if not file_extension in compressed_extensions:
         return
 
     # Calculate and ensure archive directory exists
     archive_folder = os.path.join(download_directory, file_root)
-    if not os.path.isdir(archive_folder) and not file_extension in ['.gz']:
+    if not os.path.isdir(archive_folder) and not file_extension in ['.gz', '.bz2']:
         os.makedirs(archive_folder)
 
     # Perform the actual extraction process
@@ -128,6 +128,8 @@ def check_and_extract_files(download_directory, filename, local_filename, format
         os.system('cd %s; unzip %s' % (archive_folder, local_filename))
     elif file_extension == '.gz':
         os.system('gunzip -d %s' % (local_filename))
+    elif file_extension == '.bz2':
+        os.system('bzip2 -d %s' % (local_filename))
 
     # Modify the created and modified timestamps for the archive folder
     os.system('touch -t  %s %s' % (formatted_time, archive_folder))
