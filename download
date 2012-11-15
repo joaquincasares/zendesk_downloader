@@ -81,7 +81,7 @@ def filename_split(filename):
     '''Return the filename root and extension taking .tar.gz's into account'''
 
     root, extension = os.path.splitext(filename)
-    if filename.endswith('.tar.gz'):
+    if filename.endswith('.tar.gz') or filename.endswith('.tar.bz2'):
         root, first_ext = os.path.splitext(root)
         extension = first_ext + extension
     return root, extension
@@ -110,7 +110,7 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     '''Extract files to their proper directories if file type is known'''
 
     # Compare known extractable file extensions to see if there is a match
-    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2']
+    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2', '.tar.bz2']
     file_root, file_extension = filename_split(filename)
     if not file_extension in compressed_extensions:
         return
