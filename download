@@ -110,7 +110,7 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     '''Extract files to their proper directories if file type is known'''
 
     # Compare known extractable file extensions to see if there is a match
-    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2', '.tar.bz2']
+    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2', '.tar.bz2', '.tbz']
     file_root, file_extension = filename_split(filename)
     if not file_extension in compressed_extensions:
         return
@@ -124,7 +124,7 @@ def check_and_extract_files(download_directory, filename, local_filename, format
     print "Extracting %s into %s..." % (filename, archive_folder)
     if file_extension in ['.tar.gz', '.tgz']:
         os.system('cd %s; tar xf %s' % (archive_folder, local_filename))
-    elif file_extension == '.tar.bz2':
+    elif file_extension in ['.tar.bz2', '.tbz']:
         os.system('cd %s; tar jxf %s' % (archive_folder, local_filename))
     elif file_extension == '.zip':
         os.system('cd %s; unzip %s' % (archive_folder, local_filename))
