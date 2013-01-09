@@ -11,6 +11,7 @@ You can use your API token information as found at https://support.datastax.com/
 This is mine:
 
     [ZenDesk]
+    domain = support.datastax.com
     email = joaquin@<domain>.com/token
     pass = TOKEN
 

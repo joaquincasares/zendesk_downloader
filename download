@@ -11,6 +11,7 @@ import urllib
 
 import ConfigParser
 
+domain = False
 admin_email = False
 admin_password = False
 download_directory = '/tmp'
@@ -21,6 +22,7 @@ def print_json(json_object):
     print json.dumps(json_object, sort_keys=True, indent=4)
 
 def get_authentication():
+    global domain
     global admin_email
     global admin_password
     global download_directory
@@ -36,6 +38,7 @@ def get_authentication():
             config = ConfigParser.RawConfigParser()
             config.read(configfile)
 
+            domain = config.get('ZenDesk', 'domain') if config.has_option('ZenDesk', 'domain') else raw_input('Zendesk Domain: ')
             admin_email = config.get('ZenDesk', 'email') if config.has_option('ZenDesk', 'email') else raw_input('Zendesk Email Address: ')
             admin_password = config.get('ZenDesk', 'pass') if config.has_option('ZenDesk', 'pass') and config.get('ZenDesk', 'pass') else getpass.getpass()
             download_directory = config.get('Downloader', 'download_directory') if config.has_option('Downloader', 'download_directory') else download_directory
@@ -51,29 +54,49 @@ def get_authentication():
 def get_users_by_page(page_num=1):
     '''Test function for authentication purposes'''
 
-    r = requests.get('https://support.datastax.com/users.json',
+    r = requests.get('https://%s/api/v2/users.json' % domain,
                       params={'page': page_num},
                       auth=(admin_email, admin_password))
     return r.json
 
-def get_ticket(ticket_id):
-    '''Get the ticket posting per id by way of unix'''
+def get_ticket_metadata(ticket_id):
+    '''Get the ticket meta per id'''
 
-    r = requests.get('https://support.datastax.com/tickets/%s.json' % ticket_id,
+    r = requests.get('https://%s/api/v2/tickets/%s.json' % (domain, ticket_id),
                       auth=(admin_email, admin_password))
     return r.json
 
+def get_ticket(ticket_id):
+    '''Get the ticket postings per id'''
+
+    r = requests.get('https://%s/api/v2/tickets/%s/audits.json' % (domain, ticket_id),
+                      auth=(admin_email, admin_password))
+    to_return = r.json['audits']
+
+    while r.json['next_page']:
+        r = requests.get(r.json['next_page'], auth=(admin_email, admin_password))
+        to_return = to_return + r.json['audits']
+
+    return to_return
+
 def extract_file_information(ticket):
     '''Extract curl'd XML data and format into a dictionary with an array of attachments'''
+
+    ticket_id = ticket[0]['ticket_id']
+    organization_id = get_ticket_metadata(ticket_id)['ticket']['organization_id']
     attachment_list = []
 
-    for comment in ticket['comments']:
-        for attachment in comment['attachments']:
-            attachment_list.append([attachment['id'], attachment['created_at'], attachment['filename'], attachment['url']])
+    for audit in ticket:
+        time_created = audit['created_at']
+
+        for event in audit['events']:
+            if 'attachments' in event:
+                for attachment in event['attachments']:
+                    attachment_list.append([attachment['id'], time_created, attachment['file_name'], attachment['content_url']])
 
     return {
-        'ticket_id': str(ticket['nice_id']),
-        'organization_id': str(ticket['organization_id']),
+        'ticket_id': str(ticket_id),
+        'organization_id': str(organization_id),
         'attachments': attachment_list
     }
 
@@ -97,12 +120,10 @@ def fix_filenames(file_id, filename):
 def get_formatted_time(created_at):
     '''Correctly format the time for touch -t from the provided ZenDesk timestamp'''
 
-    time_format = '%Y/%m/%d %H:%M:%S'
-    created_time, zone = created_at[:-6], created_at[-6:]
+    time_format = '%Y-%m-%dT%H:%M:%S'
+    created_time = created_at[:-1]
     created_stamp = calendar.timegm(time.strptime(created_time, time_format))
-    offset_hr, offset_min = int(zone[0:3]), int(zone[0] + zone[-2:])
-    real_stamp_time = created_stamp - (offset_hr * 3600 + offset_min * 60)
-    created_date = time.localtime(real_stamp_time)
+    created_date = time.localtime(created_stamp)
     formatted_time = time.strftime('%Y%m%d%H%M', created_date)
     return formatted_time
 
