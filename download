@@ -56,26 +56,26 @@ def get_users_by_page(page_num=1):
 
     r = requests.get('https://%s/api/v2/users.json' % domain,
                       params={'page': page_num},
-                      auth=(admin_email, admin_password))
-    return r.json
+                      auth=(admin_email, admin_password)).json()
+    return r
 
 def get_ticket_metadata(ticket_id):
     '''Get the ticket meta per id'''
 
     r = requests.get('https://%s/api/v2/tickets/%s.json' % (domain, ticket_id),
-                      auth=(admin_email, admin_password))
-    return r.json
+                      auth=(admin_email, admin_password)).json()
+    return r
 
 def get_ticket(ticket_id):
     '''Get the ticket postings per id'''
 
     r = requests.get('https://%s/api/v2/tickets/%s/audits.json' % (domain, ticket_id),
-                      auth=(admin_email, admin_password))
-    to_return = r.json['audits']
+                      auth=(admin_email, admin_password)).json()
+    to_return = r['audits']
 
-    while r.json['next_page']:
-        r = requests.get(r.json['next_page'], auth=(admin_email, admin_password))
-        to_return = to_return + r.json['audits']
+    while r['next_page']:
+        r = requests.get(r['next_page'], auth=(admin_email, admin_password))
+        to_return = to_return + r['audits']
 
     return to_return
 
