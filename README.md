@@ -45,7 +45,7 @@ where:
 Purpose
 -------
 
-* Allows filesystems to remain clutterless with support tickets
+* Allows filesystems to remain less cluttered with support tickets
 * Have all organization files ready to easily be grepped
 * Ensure that we don't have many `cassandra.yaml (30)` files (maybe just OSX)
 * Keep files organized by date of attachment, not download

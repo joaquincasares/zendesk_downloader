@@ -1,246 +1,31 @@
 #!/usr/bin/env python
 
-import calendar
-import getpass
-import json
 import os
-import requests
 import sys
-import time
-import urllib
+from downloadfiles import DownloadFiles
+from dszendesk import ZenDesk
 
-import ConfigParser
-
-domain = False
-admin_email = False
-admin_password = False
-download_directory = '/tmp'
-run_open = False
-open_program = 'open'
-
-def print_json(json_object):
-    print json.dumps(json_object, sort_keys=True, indent=4)
-
-def get_authentication():
-    global domain
-    global admin_email
-    global admin_password
-    global download_directory
-    global run_open
-    global open_program
-    configfile = os.path.join(os.path.expanduser('~'), '.zendesk.cfg')
-
-    while True:
-        if not os.path.exists(configfile):
-            admin_email = raw_input('Zendesk Email Address: ')
-            admin_password = getpass.getpass()
-        else:
-            config = ConfigParser.RawConfigParser()
-            config.read(configfile)
-
-            domain = config.get('ZenDesk', 'domain') if config.has_option('ZenDesk', 'domain') else raw_input('Zendesk Domain: ')
-            admin_email = config.get('ZenDesk', 'email') if config.has_option('ZenDesk', 'email') else raw_input('Zendesk Email Address: ')
-            admin_password = config.get('ZenDesk', 'pass') if config.has_option('ZenDesk', 'pass') and config.get('ZenDesk', 'pass') else getpass.getpass()
-            download_directory = config.get('Downloader', 'download_directory') if config.has_option('Downloader', 'download_directory') else download_directory
-            run_open = config.getboolean('Downloader', 'run_open') if config.has_option('Downloader', 'run_open') and config.get('Downloader', 'run_open') else run_open
-            open_program = config.get('Downloader', 'open_program') if config.has_option('Downloader', 'open_program') else open_program
-
-        if 'error' in get_users_by_page():
-            print 'Authentication with "%s" failed. Please try again...' % (admin_email)
-        else:
-            break
-    # print 'Succesfully authenticated to ZenDesk!'
-
-def get_users_by_page(page_num=1):
-    '''Test function for authentication purposes'''
-
-    r = requests.get('https://%s/api/v2/users.json' % domain,
-                      params={'page': page_num},
-                      auth=(admin_email, admin_password)).json()
-    return r
-
-def get_ticket_metadata(ticket_id):
-    '''Get the ticket meta per id'''
-
-    r = requests.get('https://%s/api/v2/tickets/%s.json' % (domain, ticket_id),
-                      auth=(admin_email, admin_password)).json()
-    return r
-
-def get_ticket(ticket_id):
-    '''Get the ticket postings per id'''
-
-    r = requests.get('https://%s/api/v2/tickets/%s/audits.json' % (domain, ticket_id),
-                      auth=(admin_email, admin_password)).json()
-    to_return = r['audits']
-
-    while r['next_page']:
-        r = requests.get(r['next_page'], auth=(admin_email, admin_password))
-        to_return = to_return + r['audits']
-
-    return to_return
-
-def extract_file_information(ticket):
-    '''Extract curl'd XML data and format into a dictionary with an array of attachments'''
-
-    ticket_id = ticket[0]['ticket_id']
-    organization_id = get_ticket_metadata(ticket_id)['ticket']['organization_id']
-    attachment_list = []
-
-    for audit in ticket:
-        time_created = audit['created_at']
-
-        for event in audit['events']:
-            if 'attachments' in event:
-                for attachment in event['attachments']:
-                    attachment_list.append([attachment['id'], time_created, attachment['file_name'], attachment['content_url']])
-
-    return {
-        'ticket_id': str(ticket_id),
-        'organization_id': str(organization_id),
-        'attachments': attachment_list
-    }
-
-def filename_split(filename):
-    '''Return the filename root and extension taking .tar.gz's into account'''
-
-    root, extension = os.path.splitext(filename)
-    if filename.endswith('.tar.gz') or filename.endswith('.tar.bz2'):
-        root, first_ext = os.path.splitext(root)
-        extension = first_ext + extension
-    return root, extension
-
-def fix_filenames(file_id, filename):
-    '''Make filenames ZenDesk organizational friendly'''
-
-    root, extension = filename_split(filename)
-    if not extension:
-        extension = '.txt'
-    return '%s_%s%s' % (root, file_id, extension)
-
-def get_formatted_time(created_at):
-    '''Correctly format the time for touch -t from the provided ZenDesk timestamp'''
-
-    time_format = '%Y-%m-%dT%H:%M:%S'
-    created_time = created_at[:-1]
-    created_stamp = calendar.timegm(time.strptime(created_time, time_format))
-    created_date = time.localtime(created_stamp)
-    formatted_time = time.strftime('%Y%m%d%H%M', created_date)
-    return formatted_time
-
-def check_and_extract_files(download_directory, filename, local_filename, formatted_time):
-    '''Extract files to their proper directories if file type is known'''
-
-    # Compare known extractable file extensions to see if there is a match
-    compressed_extensions = ['.tar.gz', '.tgz', '.zip', '.gz', '.bz2', '.tar.bz2', '.tbz']
-    file_root, file_extension = filename_split(filename)
-    if not file_extension in compressed_extensions:
-        return
-
-    # Calculate and ensure archive directory exists
-    archive_folder = os.path.join(download_directory, file_root)
-    if not os.path.isdir(archive_folder) and not file_extension in ['.gz', '.bz2']:
-        os.makedirs(archive_folder)
-
-    # Perform the actual extraction process
-    print "Extracting %s into %s..." % (filename, archive_folder)
-    if file_extension in ['.tar.gz', '.tgz']:
-        os.system('cd %s; tar xf %s' % (archive_folder, local_filename))
-    elif file_extension in ['.tar.bz2', '.tbz']:
-        os.system('cd %s; tar jxf %s' % (archive_folder, local_filename))
-    elif file_extension == '.zip':
-        os.system('cd %s; unzip %s' % (archive_folder, local_filename))
-    elif file_extension == '.gz':
-        os.system('gunzip -d %s' % (local_filename))
-    elif file_extension == '.bz2':
-        os.system('bzip2 -d %s' % (local_filename))
-
-    # Modify the created and modified timestamps for the archive folder
-    os.system('touch -t  %s %s' % (formatted_time, archive_folder))
-    os.system('touch -mt %s %s' % (formatted_time, archive_folder))
-
-def check_and_convert_files(download_directory, filename, local_filename, formatted_time):
-    '''Converts files to txt if file type is known'''
-
-    # Currently only supports OSX due to `textutil`
-    if sys.platform != 'darwin':
-        return
-
-    # Compare known extractable file extensions to see if there is a match
-    compressed_extensions = ['.rtf', '.doc', '.docx']
-    file_root, file_extension = filename_split(filename)
-    if not file_extension in compressed_extensions:
-        return
-
-    # Perform the actual conversion process
-    print "Converting %s into txt..." % (filename)
-    os.system('cd %s; textutil -convert txt %s' % (download_directory, local_filename))
-
-    # Modify the created and modified timestamps for the converted file
-    os.system('touch -t  %s %s.txt' % (formatted_time, file_root))
-    os.system('touch -mt %s %s.txt' % (formatted_time, file_root))
-
-    # Move the original file (to be touched later)
-    raw_directory = os.path.join(download_directory, 'raw_files')
-    if not os.path.exists(raw_directory):
-        os.makedirs(raw_directory)
-    os.system('mv %s %s' % (local_filename, raw_directory))
-
-def download_files(attachments):
-    '''Download all the files provided in the attachments dictionary'''
-
-    global download_directory
-
-    # Ensure the download directory exists
-    download_directory = os.path.join(download_directory, attachments['organization_id'], attachments['ticket_id'])
-    if not os.path.exists(download_directory):
-        os.makedirs(download_directory)
-
-    # Download each attachment
-    for attachment in attachments['attachments']:
-
-        # Extract and properly format all data
-        file_id, created_at, filename, url = attachment
-        filename = fix_filenames(file_id, filename)
-        local_filename = os.path.join(download_directory, filename)
-        formatted_time = get_formatted_time(created_at)
-
-        # Perform the actual download of each file
-        if not os.path.exists(local_filename):
-            print "Downloading %s to %s..." % (filename, local_filename)
-            urllib.urlretrieve(url, local_filename)
-
-            # Check if file extraction is possible
-            check_and_extract_files(download_directory, filename, local_filename, formatted_time)
-            check_and_convert_files(download_directory, filename, local_filename, formatted_time)
-
-            # Modify the created and modified timestamps for each file
-            os.system('touch -t  %s %s' % (formatted_time, local_filename))
-            os.system('touch -mt %s %s' % (formatted_time, local_filename))
-
-    return download_directory
 
 def main():
     if len(sys.argv) == 2:
         ticket_id = sys.argv[1]
     else:
-        sys.stderr.write('Usage: %s <ticket_id>\n' % __file__)
+        sys.stderr.write('Usage: {0} <ticket_id>\n'.format(__file__))
         sys.exit(1)
 
+    zd = ZenDesk()
     # Ensure our authentication is correct
-    get_authentication()
+    zd.authenticate()
 
     # Perform all attachment downloads
-    ticket = get_ticket(ticket_id)
-    attachments = extract_file_information(ticket)
-    download_directory = download_files(attachments)
+    attachments = zd.extract_file_information(ticket_id)
+    dl = DownloadFiles()
+    download_directory = dl.download_files(zd.download_directory, attachments)
 
     # Open the finder to display downloaded files
-    print
-    print "Files download to:"
-    print download_directory
-    print
-    if run_open:
-        os.system('%s %s' % (open_program, download_directory))
+    print "\nFiles download to:\n{0}\n".format(download_directory)
+    if zd.run_open:
+        os.system('{0} "{1}"'.format(zd.open_program, download_directory))
 
 
 if __name__ == "__main__":
