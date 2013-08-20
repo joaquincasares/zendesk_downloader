@@ -13,7 +13,8 @@ class DownloadFiles(object):
                     ".tbz": "tar xjf",
                     ".zip": "unzip",
                     ".gz": "gunzip",
-                    ".bz2": "bzip2",
+                    ".bz2": "bunzip2",
+                    ".7z": "7z x",
                     ".rtf": "textutil -convert txt",
                     ".doc": "textutil -convert txt",
                     ".docx": "textutil -convert txt"}
@@ -30,6 +31,9 @@ class DownloadFiles(object):
         while extension:
             root, extension = os.path.splitext(root)
             full_extension = extension + full_extension
+            if full_extension in DownloadFiles.extToCommand:
+                last_extension = full_extension
+
         full_extension = full_extension.lower()
         last_extension = last_extension.lower()
         return root, full_extension, last_extension
