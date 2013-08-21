@@ -13,7 +13,8 @@ class DownloadFiles(object):
                     ".tbz": "tar xjf",
                     ".zip": "unzip",
                     ".gz": "gunzip",
-                    ".bz2": "bzip2",
+                    ".bz2": "bunzip2",
+                    ".7z": "7z x",
                     ".rtf": "textutil -convert txt",
                     ".doc": "textutil -convert txt",
                     ".docx": "textutil -convert txt"}
@@ -26,21 +27,25 @@ class DownloadFiles(object):
         :param filename: the filename to split
         """
         root, extension = os.path.splitext(filename)
-        full_extension = extension
+        last_extension = full_extension = extension
         while extension:
             root, extension = os.path.splitext(root)
             full_extension = extension + full_extension
+            if full_extension in DownloadFiles.extToCommand:
+                last_extension = full_extension
+
         full_extension = full_extension.lower()
-        return root, full_extension
+        last_extension = last_extension.lower()
+        return root, full_extension, last_extension
 
     def fix_filename(self, file_id, filename):
         """Make filename ZenDesk organizational friendly"""
-        root, extension = self.filename_split(filename)
-        if not extension:
-            extension = '.txt'
+        root, full_extension, last_extention = self.filename_split(filename)
+        if not full_extension:
+            full_extension = '.txt'
         #Clean up name
         root = re.sub(r"[^a-zA-Z_0-9\-]", "", root)
-        return '%s_%s%s' % (root, file_id, extension)
+        return '%s_%s%s' % (root, file_id, full_extension)
 
     def get_formatted_time(self, created_at):
         """Correctly format the time for touch -t from the provided ZenDesk timestamp"""
@@ -86,9 +91,12 @@ class DownloadFiles(object):
         :param formatted_time: timestamp of the file
         """
         # Compare known extractable file extensions to see if there is a match
-        file_root, file_extension = self.filename_split(filename)
+        file_root, file_extension, final_extension = self.filename_split(filename)
         if not file_extension in DownloadFiles.extToCommand:
-            return
+            if final_extension in DownloadFiles.extToCommand:
+                file_extension = final_extension
+            else:
+                return
 
         # Calculate and archive directory
         command = DownloadFiles.extToCommand[file_extension]
