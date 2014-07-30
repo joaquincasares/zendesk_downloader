@@ -4,6 +4,7 @@ import ConfigParser
 import requests
 if requests.__version__.split('.')[0] == '0':
     raise ImportError('requests library must be at least 1.0, current is only '+requests.__version__)
+VERIFY_SSL = False
 import re
 
 
@@ -48,23 +49,27 @@ class ZenDesk(object):
         """Test function for authentication purposes"""
         r = requests.get('https://%s/api/v2/users.json' % self.domain,
                          params={'page': page_num},
-                         auth=(self.admin_email, self.admin_password)).json()
+                         auth=(self.admin_email, self.admin_password),
+                         verify=VERIFY_SSL).json()
         return r
 
     def get_all_ticket_metadata(self, ticket_id):
         """Get the ticket meta per id"""
         r = requests.get('https://%s/api/v2/tickets/%s.json?include=organizations' % (self.domain, ticket_id),
-                         auth=(self.admin_email, self.admin_password)).json()
+                         auth=(self.admin_email, self.admin_password),
+                         verify=VERIFY_SSL).json()
         return r
 
     def get_ticket(self, ticket_id):
         """Get the ticket postings per id"""
         r = requests.get('https://%s/api/v2/tickets/%s/audits.json' % (self.domain, ticket_id),
-                         auth=(self.admin_email, self.admin_password)).json()
+                         auth=(self.admin_email, self.admin_password),
+                         verify=VERIFY_SSL).json()
         to_return = r['audits']
 
         while r['next_page']:
-            r = requests.get(r['next_page'], auth=(self.admin_email, self.admin_password)).json()
+            r = requests.get(r['next_page'], auth=(self.admin_email, self.admin_password),
+                         verify=VERIFY_SSL).json()
             to_return = to_return + r['audits']
 
         return to_return
